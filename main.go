@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -45,6 +44,20 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	newPath := strings.Replace(r.URL.Path, "/release", "", 1)
 	newPath = strings.Replace(newPath, "/test", "", 1)
 
+	// 提取 X-Forwarded-For 和 X-Real-IP 头部
+	xForwardedFor := r.Header.Get("X-Forwarded-For")
+	xRealIP := r.Header.Get("X-Real-IP")
+
+	// 确定使用者IP
+	userIP := ""
+	if xForwardedFor != "" {
+		userIP = xForwardedFor
+	} else if xRealIP != "" {
+		userIP = xRealIP
+	} else {
+		userIP = r.RemoteAddr // 如果没有这些头部，使用连接来源地址
+	}
+
 	// 拼接目标URL（带上查询字符串，如果有的话）
 	// 如果请求中包含 X-Target-Host 头，则使用该头作为目标域名
 	// 优先级 header > args > default
@@ -58,10 +71,8 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		targetURL += "?" + r.URL.RawQuery
 	}
 
-	// 本地打印代理请求完整URL用于调试
-	if os.Getenv("ENV") == "local" {
-		fmt.Printf("Proxying request to: %s\n", targetURL)
-	}
+	// 打印代理请求信息
+	fmt.Printf("Proxying [%s] request for [%s]\n", targetURL, userIP)
 
 	// 创建代理HTTP请求
 	proxyReq, err := http.NewRequest(r.Method, targetURL, r.Body)
@@ -70,6 +81,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error creating proxy request", http.StatusInternalServerError)
 		return
 	}
+
+	// 删除原始请求中的 X-Forwarded-For 和 X-Real-IP 头部
+	r.Header.Del("X-Forwarded-For")
+	r.Header.Del("X-Real-IP")
 
 	// 将原始请求头复制到新请求中
 	for headerKey, headerValues := range r.Header {
