@@ -71,11 +71,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 将原始请求头复制到新请求中
-	for headerKey, headerValues := range r.Header {
-		for _, headerValue := range headerValues {
-			proxyReq.Header.Add(headerKey, headerValue)
-		}
+	authorization := r.Header.Get("authorization")
+	proxyReq.Header = http.Header{
+		"Content-Type":  {"application/json"},
+		"authorization": {authorization},
 	}
 
 	// 默认超时时间设置为300s（应对长上下文）
@@ -110,6 +109,13 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// 将响应状态码设置为原始响应状态码
 	w.WriteHeader(resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err == nil {
+			w.Write(bodyBytes)
+			return
+		}
+	}
 
 	// 将响应实体写入到响应流中（支持流式响应）
 	buf := make([]byte, 1024)
