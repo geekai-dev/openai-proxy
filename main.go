@@ -83,6 +83,21 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 适配 Vertex 本地认证，需要先本地安装 gcloud 并初始化
+	if strings.Contains(targetURL, "aiplatform.googleapis.com") {
+		if proxyReq.Header.Get("Authorization") != "" {
+			// 通过 gcloud 获取 Vertex AI 的动态认证令牌
+			_token, err := getVertexAuthToken()
+			if err != nil {
+				log.Println("Error getting Vertex auth token: ", err.Error())
+				http.Error(w, "Error getting Vertex auth token", http.StatusInternalServerError)
+				return
+			}
+			// 设置新的 Authorization 头
+			proxyReq.Header.Set("Authorization", "Bearer "+_token)
+		}
+	}
+
 	// 默认超时时间设置为300s（应对长上下文）
 	client := &http.Client{
 		// Timeout: 300 * time.Second,  // 代理不干涉超时逻辑，由客户端自行设置
